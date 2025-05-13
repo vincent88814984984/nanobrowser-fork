@@ -599,27 +599,39 @@ export default class Page {
         `::-p-xpath(//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '${text.toLowerCase()}')])`,
       ];
 
+      let foundAnyMatch = false;
+
       for (const selector of selectors) {
         try {
-          const element = await this._puppeteerPage.$(selector);
-          if (element) {
-            // Check if element is visible
-            const isVisible = await element.evaluate(el => {
-              const style = window.getComputedStyle(el);
-              return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-            });
+          // Use $$ to get all matching elements instead of just the first one
+          const elements = await this._puppeteerPage.$$(selector);
+          if (elements.length > 0) {
+            // Process each visible element
+            for (const element of elements) {
+              // Check if element is visible
+              const isVisible = await element.evaluate(el => {
+                const style = window.getComputedStyle(el);
+                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+              });
 
-            if (isVisible) {
-              await this._scrollIntoViewIfNeeded(element);
-              await new Promise(resolve => setTimeout(resolve, 500)); // Wait for scroll to complete
-              return true;
+              if (isVisible) {
+                await this._scrollIntoViewIfNeeded(element);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for scroll to complete
+                foundAnyMatch = true;
+              }
+            }
+            
+            // If we found matches with this selector, no need to try other selectors
+            if (foundAnyMatch) {
+              break;
             }
           }
         } catch (e) {
           logger.debug(`Locator attempt failed: ${e}`);
         }
       }
-      return false;
+      
+      return foundAnyMatch;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : String(error));
     }
